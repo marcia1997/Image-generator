@@ -2,9 +2,12 @@ import asyncio
 import sys
 import os
 from logging.config import fileConfig
-
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine, async_sessionmaker
 from alembic import context
+import nest_asyncio
+
+nest_asyncio.apply()
+
 
 # 📌 Add the absolute path of the backend directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
