@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from pydantic import BaseModel
@@ -7,30 +8,41 @@ from models import User, Image
 from auth import hash_password, verify_password, create_access_token
 from fastapi.security import OAuth2PasswordRequestForm
 
-# Initialize FastAPI app
+# Init FastAPI
 app = FastAPI()
 
-# User Registration Schema
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], 
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Schemas
 class UserCreate(BaseModel):
     username: str
     password: str
 
-# User Login Response Schema
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
 
-# Image Creation Schema
 class ImageCreate(BaseModel):
     prompt: str
     image_url: str
     style: str
 
-### --- USER AUTHENTICATION ENDPOINTS --- ###
+### --- AUTH --- ###
 
 @app.post("/register")
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    """ Registers a new user with a hashed password. """
+    """ Registra un nuevo usuario con contraseña encriptada. """
     result = await db.execute(select(User).where(User.username == user.username))
     existing_user = result.scalars().first()
 
@@ -45,25 +57,52 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.refresh(new_user)
     return {"message": "User created successfully"}
 
-
 @app.post("/login", response_model=TokenResponse)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    """ Authenticates user and returns a JWT access token. """
+async def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db),
+):
+    """ Inicia sesión usando `x-www-form-urlencoded`. """
+    print(f"📥 Received form-data: username={form_data.username}, password={form_data.password}")
+
     result = await db.execute(select(User).where(User.username == form_data.username))
     user = result.scalars().first()
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user:
+        print("❌ Usuario no encontrado.")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    if not verify_password(form_data.password, user.hashed_password):
+        print(f"❌ Contraseña incorrecta. Ingresada: {form_data.password}, En BD: {user.hashed_password}")
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     access_token = create_access_token({"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.post("/login-json", response_model=TokenResponse)
+async def login_json(user_data: UserLogin, db: AsyncSession = Depends(get_db)):
+    """ Inicia sesión con JSON (Content-Type: application/json). """
+    print(f"📥 Received JSON: {user_data}")
 
-### --- IMAGE MANAGEMENT ENDPOINTS --- ###
+    result = await db.execute(select(User).where(User.username == user_data.username))
+    user = result.scalars().first()
+
+    if not user:
+        print("❌ Usuario no encontrado.")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    if not verify_password(user_data.password, user.hashed_password):
+        print(f"❌ Contraseña incorrecta. Ingresada: {user_data.password}, En BD: {user.hashed_password}")
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    access_token = create_access_token({"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+### --- Images --- ###
 
 @app.get("/images")
 async def get_images(db: AsyncSession = Depends(get_db)):
-    """ Retrieves all stored images. """
+    """ Obtiene todas las imágenes almacenadas. """
     result = await db.execute(select(Image))
     images = result.scalars().all()
     
@@ -71,7 +110,7 @@ async def get_images(db: AsyncSession = Depends(get_db)):
 
 @app.post("/images")
 async def create_image(image: ImageCreate, db: AsyncSession = Depends(get_db)):
-    """ Saves a new image entry into the database. """
+    """ Guarda una nueva imagen en la base de datos. """
     new_image = Image(prompt=image.prompt, image_url=image.image_url, style=image.style)
     db.add(new_image)
     await db.commit()
@@ -80,7 +119,7 @@ async def create_image(image: ImageCreate, db: AsyncSession = Depends(get_db)):
 
 @app.delete("/images/{id}")
 async def delete_image(id: int, db: AsyncSession = Depends(get_db)):
-    """ Deletes an image by ID if it exists. """
+    """ Elimina una imagen por ID si existe. """
     result = await db.execute(select(Image).where(Image.id == id))
     image = result.scalars().first()
 
