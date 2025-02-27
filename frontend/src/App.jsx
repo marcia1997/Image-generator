@@ -1,7 +1,7 @@
 export default function App() {
   return (
-    <div className="flex h-screen items-center justify-center bg-blue-500 text-white text-3xl font-bold">
-      🎨 TailwindCSS is working! 🚀
+    <div className="bg-red-500 text-white p-4 text-center">
+      Tailwind is working! 🎉
     </div>
   );
 }
