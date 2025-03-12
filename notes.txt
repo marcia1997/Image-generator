@@ -1,0 +1,2 @@
+ $env:PYTHONPATH = "C:\Users\Marcia\OneDrive\Escritorio\AI-proyectos\Image-generator\backend"
+>> uvicorn main:app --reload
